@@ -1,5 +1,5 @@
 # app.py
-# Modern Result Processor with Login, CGPA, 3D animated header (Three.js), robust DB handling
+# Clean modern Result Processor with soft micro-animations (no 3D), login + CGPA calculator
 import streamlit as st
 import sqlite3
 import pandas as pd
@@ -7,12 +7,11 @@ from io import BytesIO
 from datetime import datetime
 import os
 import traceback
-import streamlit.components.v1 as components
 
 # -------------------------
-# Config & safety wrapper
+# Configuration & safety
 # -------------------------
-st.set_page_config(page_title="Digital Result Processor — Modern", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Digital Result Processor", layout="wide", initial_sidebar_state="expanded")
 
 # Wrap startup in try/except to avoid black screen on Streamlit Cloud
 try:
@@ -29,26 +28,23 @@ try:
     def init_db():
         conn = get_conn()
         cur = conn.cursor()
-        # students table
-        cur.execute("""
+        cur.execute(\"\"\"
         CREATE TABLE IF NOT EXISTS students (
             student_id INTEGER PRIMARY KEY AUTOINCREMENT,
             roll TEXT UNIQUE,
             name TEXT,
             program TEXT
         )
-        """)
-        # subjects table
-        cur.execute("""
+        \"\"\")
+        cur.execute(\"\"\"
         CREATE TABLE IF NOT EXISTS subjects (
             subject_id INTEGER PRIMARY KEY AUTOINCREMENT,
             code TEXT UNIQUE,
             title TEXT,
             credits REAL
         )
-        """)
-        # marks table
-        cur.execute("""
+        \"\"\")
+        cur.execute(\"\"\"
         CREATE TABLE IF NOT EXISTS marks (
             mark_id INTEGER PRIMARY KEY AUTOINCREMENT,
             student_id INTEGER,
@@ -58,7 +54,7 @@ try:
             FOREIGN KEY(student_id) REFERENCES students(student_id),
             FOREIGN KEY(subject_id) REFERENCES subjects(subject_id)
         )
-        """)
+        \"\"\")
         conn.commit()
         conn.close()
 
@@ -68,35 +64,30 @@ try:
     # Business logic (grading)
     # -------------------------
     def grade_from_percent(p):
-        # typical scale - adjust to your institute
-        if p >= 90: return ("A+", 10.0)
-        if p >= 80: return ("A", 9.0)
-        if p >= 70: return ("B+", 8.0)
-        if p >= 60: return ("B", 7.0)
-        if p >= 50: return ("C", 6.0)
-        if p >= 40: return ("D", 5.0)
-        return ("F", 0.0)
+        if p >= 90: return (\"A+\", 10.0)
+        if p >= 80: return (\"A\", 9.0)
+        if p >= 70: return (\"B+\", 8.0)
+        if p >= 60: return (\"B\", 7.0)
+        if p >= 50: return (\"C\", 6.0)
+        if p >= 40: return (\"D\", 5.0)
+        return (\"F\", 0.0)
 
     def compute_student_report(student_id):
         conn = get_conn()
-        q = """
+        q = \"\"\"
         SELECT s.student_id, s.roll, s.name, sub.code, sub.title, sub.credits, m.marks, m.max_marks
         FROM students s
         JOIN marks m ON s.student_id = m.student_id
         JOIN subjects sub ON m.subject_id = sub.subject_id
         WHERE s.student_id = ?
-        """
+        \"\"\"
         df = pd.read_sql_query(q, conn, params=(student_id,))
         conn.close()
         if df.empty:
             return None
 
-        # compute percent, grade, grade_points
         df['percent'] = (df['marks'] / df['max_marks']) * 100
-        df[['grade', 'grade_point']] = df['percent'].apply(
-            lambda p: pd.Series(grade_from_percent(p))
-        )
-        # credit*grade_point
+        df[['grade', 'grade_point']] = df['percent'].apply(lambda p: pd.Series(grade_from_percent(p)))
         df['credit_gp'] = df['credits'] * df['grade_point']
 
         total_credits = df['credits'].sum()
@@ -104,27 +95,27 @@ try:
         cgpa = (total_credit_gp / total_credits) if total_credits > 0 else 0.0
 
         summary = {
-            "roll": df.iloc[0]['roll'],
-            "name": df.iloc[0]['name'],
-            "total_credits": float(total_credits),
-            "total_credit_gp": float(total_credit_gp),
-            "cgpa": round(cgpa, 2),
-            "generated_at": datetime.utcnow().isoformat() + "Z"
+            \"roll\": df.iloc[0]['roll'],
+            \"name\": df.iloc[0]['name'],
+            \"total_credits\": float(total_credits),
+            \"total_credit_gp\": float(total_credit_gp),
+            \"cgpa\": round(cgpa, 2),
+            \"generated_at\": datetime.utcnow().isoformat() + \"Z\"
         }
         return df, summary
 
     # -------------------------
     # Data operations
     # -------------------------
-    def add_student(roll, name, program=""):
+    def add_student(roll, name, program=\"\"):
         conn = get_conn()
         cur = conn.cursor()
         try:
-            cur.execute("INSERT INTO students (roll, name, program) VALUES (?, ?, ?)", (roll, name, program))
+            cur.execute(\"INSERT INTO students (roll, name, program) VALUES (?, ?, ?)\", (roll, name, program))
             conn.commit()
-            st.success("Student added")
+            st.success(\"Student added\")
         except sqlite3.IntegrityError:
-            st.warning("Student with this roll already exists.")
+            st.warning(\"Student with this roll already exists.\")
         finally:
             conn.close()
 
@@ -132,11 +123,11 @@ try:
         conn = get_conn()
         cur = conn.cursor()
         try:
-            cur.execute("INSERT INTO subjects (code, title, credits) VALUES (?, ?, ?)", (code, title, float(credits)))
+            cur.execute(\"INSERT INTO subjects (code, title, credits) VALUES (?, ?, ?)\", (code, title, float(credits)))
             conn.commit()
-            st.success("Subject added")
+            st.success(\"Subject added\")
         except sqlite3.IntegrityError:
-            st.warning("Subject with this code already exists.")
+            st.warning(\"Subject with this code already exists.\")
         finally:
             conn.close()
 
@@ -144,390 +135,310 @@ try:
         conn = get_conn()
         cur = conn.cursor()
         try:
-            cur.execute("SELECT student_id FROM students WHERE roll = ?", (roll,))
+            cur.execute(\"SELECT student_id FROM students WHERE roll = ?\", (roll,))
             s = cur.fetchone()
             if not s:
-                st.error("Student roll not found.")
+                st.error(\"Student roll not found.\")
                 return
             student_id = s[0]
-            cur.execute("SELECT subject_id FROM subjects WHERE code = ?", (subject_code,))
+            cur.execute(\"SELECT subject_id FROM subjects WHERE code = ?\", (subject_code,))
             sub = cur.fetchone()
             if not sub:
-                st.error("Subject code not found.")
+                st.error(\"Subject code not found.\")
                 return
             subject_id = sub[0]
-            # upsert: if a mark exists for this student & subject, replace it
-            cur.execute("""
-            SELECT mark_id FROM marks WHERE student_id = ? AND subject_id = ?
-            """, (student_id, subject_id))
+            cur.execute(\"SELECT mark_id FROM marks WHERE student_id = ? AND subject_id = ?\", (student_id, subject_id))
             existing = cur.fetchone()
             if existing:
-                cur.execute("UPDATE marks SET marks=?, max_marks=? WHERE mark_id=?", (float(marks), float(max_marks), existing[0]))
+                cur.execute(\"UPDATE marks SET marks=?, max_marks=? WHERE mark_id=?\", (float(marks), float(max_marks), existing[0]))
             else:
-                cur.execute("INSERT INTO marks (student_id, subject_id, marks, max_marks) VALUES (?, ?, ?, ?)",
+                cur.execute(\"INSERT INTO marks (student_id, subject_id, marks, max_marks) VALUES (?, ?, ?, ?)\",
                             (student_id, subject_id, float(marks), float(max_marks)))
             conn.commit()
-            st.success("Marks saved")
+            st.success(\"Marks saved\")
         finally:
             conn.close()
 
     def get_all_students_df():
         conn = get_conn()
-        df = pd.read_sql_query("SELECT student_id, roll, name, program FROM students ORDER BY roll", conn)
+        df = pd.read_sql_query(\"SELECT student_id, roll, name, program FROM students ORDER BY roll\", conn)
         conn.close()
         return df
 
     def get_all_subjects_df():
         conn = get_conn()
-        df = pd.read_sql_query("SELECT subject_id, code, title, credits FROM subjects ORDER BY code", conn)
+        df = pd.read_sql_query(\"SELECT subject_id, code, title, credits FROM subjects ORDER BY code\", conn)
         conn.close()
         return df
 
     def export_df_to_excel_bytes(dfs: dict):
         with BytesIO() as b:
-            with pd.ExcelWriter(b, engine="openpyxl") as writer:
+            with pd.ExcelWriter(b, engine=\"openpyxl\") as writer:
                 for sheet_name, df in dfs.items():
                     df.to_excel(writer, sheet_name=sheet_name[:31], index=False)
             return b.getvalue()
 
     # -------------------------
-    # Auth & session
+    # Auth & session (hard-coded)
     # -------------------------
-    # Option A: hard-coded credentials
-    CREDENTIALS = {"admin": "1234"}  # change here if you want
+    CREDENTIALS = {\"admin\": \"1234\"}  # change this map to add users
 
-    if "logged_in" not in st.session_state:
+    if \"logged_in\" not in st.session_state:
         st.session_state.logged_in = False
-    if "username" not in st.session_state:
+    if \"username\" not in st.session_state:
         st.session_state.username = None
-    if "nav" not in st.session_state:
-        st.session_state.nav = "Dashboard"
+    if \"nav\" not in st.session_state:
+        st.session_state.nav = \"Dashboard\"
 
     def login_ui():
-        st.markdown("""
-        <div style="display:flex;align-items:center;gap:12px">
-            <div style="flex:1">
-                <h2 style="margin:0;padding:0;color:#f1f5f9">Welcome — Sign in</h2>
-                <div style="color:#9fb0d9">Enter your username and password to continue.</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        with st.form("login_form"):
-            username = st.text_input("Username", value="", placeholder="admin")
-            password = st.text_input("Password", type="password", placeholder="1234")
-            submitted = st.form_submit_button("Sign in")
+        st.markdown(\"<div style='max-width:700px;margin:auto;'>\", unsafe_allow_html=True)
+        st.markdown(\"<h2 style='text-align:center;margin:0;color:#0b2545;'>Welcome — Sign in</h2>\", unsafe_allow_html=True)
+        st.markdown(\"<p style='text-align:center;color:#3a5a82;margin-top:6px;'>Enter your username and password to continue.</p>\", unsafe_allow_html=True)
+        with st.form(\"login_form\", clear_on_submit=False):
+            cols = st.columns([1,1])
+            with cols[0]:
+                username = st.text_input(\"Username\", value=\"\", placeholder=\"admin\")
+            with cols[1]:
+                password = st.text_input(\"Password\", type=\"password\", placeholder=\"1234\")
+            submitted = st.form_submit_button(\"Sign in\")
             if submitted:
                 if username in CREDENTIALS and CREDENTIALS[username] == password:
                     st.session_state.logged_in = True
                     st.session_state.username = username
-                    st.success("Login successful.")
+                    st.success(\"Login successful.\")
                     st.experimental_rerun()
                 else:
-                    st.error("Invalid username or password.")
+                    st.error(\"Invalid username or password.\")
+        st.markdown(\"</div>\", unsafe_allow_html=True)
 
     # -------------------------
-    # Styling: modern glass + gradient
+    # Styling: modern minimal + soft micro-animations
     # -------------------------
-    st.markdown("""
+    st.markdown(\"\"\"
     <style>
-    :root{ --bg1: linear-gradient(135deg, rgba(63,94,251,0.10), rgba(252,70,107,0.06)); }
-    body { background: linear-gradient(180deg, #041030 0%, #071a2b 100%); color: #e6eef8; }
+    :root{ --bg: linear-gradient(180deg,#f7fbff 0%, #eef6ff 100%); }
+    body { background: linear-gradient(180deg,#f7fbff 0%, #eef6ff 100%); color: #0b2545; }
     .block-container{ max-width:1400px; padding:1rem 2rem; }
-    .card { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:14px; padding:18px; border:1px solid rgba(255,255,255,0.03); box-shadow: 0 8px 30px rgba(2,6,23,0.6);}
-    .small-muted{ color:#9fb0d9; font-size:13px; }
+    .card { background: #ffffff; border-radius:12px; padding:18px; border:1px solid rgba(11,37,69,0.06); box-shadow: 0 6px 24px rgba(11,37,69,0.04); transition: transform 0.18s ease, box-shadow 0.18s ease; }
+    .card:hover { transform: translateY(-6px); box-shadow: 0 12px 40px rgba(11,37,69,0.08); }
+    .small-muted{ color:#3a5a82; font-size:13px; }
     .top-row { display:flex; gap:12px; align-items:center; justify-content:space-between; }
-    .logo-box{ width:60px; height:60px; border-radius:12px; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#5b8cff,#b962ff); box-shadow:0 6px 20px rgba(91,140,255,0.12); }
-    .logout { color:#ff9b9b; }
-    .metric { font-weight:700; font-size:20px; color:#fff; }
-    .stButton>button { border-radius:10px; height:44px; }
+    .logo-box{ width:56px; height:56px; border-radius:12px; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#4b7bec,#7b61ff); color:white; font-weight:700; box-shadow:0 8px 24px rgba(75,123,236,0.12); }
+    .stButton>button { border-radius:10px; height:44px; transition: transform 0.12s ease; }
+    .stButton>button:hover { transform: translateY(-3px); }
+    .metric { font-weight:700; font-size:20px; color:#0b2545; }
+    .fade-in { animation: fadeIn 0.36s ease both; }
+    @keyframes fadeIn { from { opacity:0; transform: translateY(6px);} to { opacity:1; transform: translateY(0);} }
     </style>
-    """, unsafe_allow_html=True)
+    \"\"\", unsafe_allow_html=True)
 
     # -------------------------
-    # 3D Animated header (Three.js embed)
-    # -------------------------
-    # small Three.js scene: rotating torus + gradient background
-    three_html = r"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8" />
-      <style>
-        body { margin:0; overflow:hidden; }
-        #bg { position: absolute; inset:0; }
-      </style>
-    </head>
-    <body>
-      <div id="bg"></div>
-      <script src="https://unpkg.com/three@0.150.1/build/three.min.js"></script>
-      <script>
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({alpha:true, antialias:true});
-        renderer.setSize(window.innerWidth, 220);
-        document.getElementById('bg').appendChild(renderer.domElement);
-
-        // gradient background via scene.fog color blending
-        renderer.setClearColor(0x071a2b, 0);
-
-        camera.position.z = 5;
-        const light1 = new THREE.PointLight(0xff6b6b, 1);
-        light1.position.set(5,5,5);
-        const light2 = new THREE.PointLight(0x6b9eff, 1);
-        light2.position.set(-5,-3,5);
-        scene.add(light1, light2);
-
-        const geometry = new THREE.TorusKnotGeometry(1.0, 0.35, 150, 20);
-        const material = new THREE.MeshStandardMaterial({
-          metalness:0.6,
-          roughness:0.25,
-          color:0xffffff,
-          emissive:0x0a2540,
-          envMapIntensity:1
-        });
-        const knot = new THREE.Mesh(geometry, material);
-        scene.add(knot);
-
-        // responsive
-        window.addEventListener('resize', ()=> {
-          renderer.setSize(window.innerWidth, 220);
-          camera.aspect = window.innerWidth/window.innerHeight;
-          camera.updateProjectionMatrix();
-        });
-
-        let t = 0;
-        function animate(){
-          requestAnimationFrame(animate);
-          t += 0.01;
-          knot.rotation.x = t*0.6;
-          knot.rotation.y = t*0.9;
-          knot.rotation.z = Math.sin(t)*0.2;
-          renderer.render(scene, camera);
-        }
-        animate();
-      </script>
-    </body>
-    </html>
-    """
-
-    # -------------------------
-    # Top header
+    # Header
     # -------------------------
     col1, col2 = st.columns([4,1])
     with col1:
-        st.markdown("<div class='top-row'><div style='display:flex;gap:12px;align-items:center'><div class='logo-box'>📘</div><div><h2 style='margin:0;padding:0'>Digital Result Processor</h2><div class='small-muted'>Stunning UI • CGPA & grades • exportable reports</div></div></div></div>", unsafe_allow_html=True)
-        # show 3D animation below header
-        components.html(three_html, height=220, scrolling=False)
+        st.markdown(\"<div class='top-row'><div style='display:flex;gap:12px;align-items:center'><div class='logo-box'>RP</div><div><h2 style='margin:0;padding:0'>Result Processor</h2><div class='small-muted'>Clean UI • Reliable CGPA • Soft micro-animations</div></div></div></div>\", unsafe_allow_html=True)
     with col2:
         if st.session_state.logged_in:
-            st.markdown(f"<div class='small-muted center'>Signed in as <strong>{st.session_state.username}</strong></div>", unsafe_allow_html=True)
-            if st.button("Logout"):
+            st.markdown(f\"<div style='text-align:right' class='small-muted'>Signed in as <strong>{st.session_state.username}</strong></div>\", unsafe_allow_html=True)
+            if st.button(\"Logout\", key=\"logout_btn\"):
                 st.session_state.logged_in = False
                 st.session_state.username = None
                 st.experimental_rerun()
 
     # -------------------------
-    # Login screen
+    # Login handling
     # -------------------------
     if not st.session_state.logged_in:
-        with st.container():
-            st.markdown("<div class='card'>", unsafe_allow_html=True)
-            login_ui()
-            st.markdown("</div>", unsafe_allow_html=True)
-            st.stop()
+        st.markdown(\"<div class='card fade-in' style='max-width:900px;margin:16px auto;'>\", unsafe_allow_html=True)
+        login_ui()
+        st.markdown(\"</div>\", unsafe_allow_html=True)
+        st.stop()
 
     # -------------------------
-    # Sidebar navigation
+    # Sidebar navigation (after login)
     # -------------------------
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### Navigation")
-    st.session_state.nav = st.sidebar.selectbox("", ["Dashboard", "Add Data", "Enter Marks", "Student Report", "Export", "Admin"], index=["Dashboard","Add Data","Enter Marks","Student Report","Export","Admin"].index(st.session_state.nav) if st.session_state.nav in ["Dashboard","Add Data","Enter Marks","Student Report","Export","Admin"] else 0)
-    st.sidebar.markdown("---")
-    st.sidebar.write(f"Logged in as **{st.session_state.username}**")
-    st.sidebar.markdown("---")
-    st.sidebar.caption("Built with ❤️ using Streamlit")
+    st.sidebar.markdown(\"---\")
+    st.sidebar.markdown(\"### Navigation\")
+    st.session_state.nav = st.sidebar.selectbox(\"\", [\"Dashboard\", \"Add Data\", \"Enter Marks\", \"Student Report\", \"Export\", \"Admin\"], index=[\"Dashboard\",\"Add Data\",\"Enter Marks\",\"Student Report\",\"Export\",\"Admin\"].index(st.session_state.nav) if st.session_state.nav in [\"Dashboard\",\"Add Data\",\"Enter Marks\",\"Student Report\",\"Export\",\"Admin\"] else 0)
+    st.sidebar.markdown(\"---\")
+    st.sidebar.write(f\"Logged in as **{st.session_state.username}**\")
+    st.sidebar.markdown(\"---\")
+    st.sidebar.caption(\"Built with ❤️ — clean UI\")
 
     # -------------------------
-    # Pages (re-using your original logic with improved layout)
+    # Pages
     # -------------------------
     menu = st.session_state.nav
 
-    if menu == "Dashboard":
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.header("Class Summary")
+    if menu == \"Dashboard\":
+        st.markdown(\"<div class='card fade-in'>\", unsafe_allow_html=True)
+        st.header(\"Class Summary\")
         students = get_all_students_df()
         subjects = get_all_subjects_df()
         colA, colB, colC = st.columns([2,1,1])
         with colA:
-            st.subheader("Students")
-            st.write(f"Total students: {len(students)}")
+            st.subheader(\"Students\")
+            st.write(f\"Total students: {len(students)}\")
             st.dataframe(students, use_container_width=True)
         with colB:
-            st.subheader("Subjects")
-            st.write(f"Total subjects: {len(subjects)}")
+            st.subheader(\"Subjects\")
+            st.write(f\"Total subjects: {len(subjects)}\")
             st.dataframe(subjects, use_container_width=True)
         with colC:
-            # compute class average CGPA (if possible)
             cgpa_vals = []
             for sid in students['student_id'].tolist():
                 result = compute_student_report(sid)
                 if result:
                     cgpa_vals.append(result[1]['cgpa'])
-            avg_cgpa = round(sum(cgpa_vals)/len(cgpa_vals),2) if cgpa_vals else "—"
-            st.markdown("<div class='metric'>Class Avg. CGPA</div>", unsafe_allow_html=True)
-            st.markdown(f"<h2 style='margin-top:6px'>{avg_cgpa}</h2>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+            avg_cgpa = round(sum(cgpa_vals)/len(cgpa_vals),2) if cgpa_vals else \"—\"
+            st.markdown(\"<div class='metric'>Class Avg. CGPA</div>\", unsafe_allow_html=True)
+            st.markdown(f\"<h2 style='margin-top:6px'>{avg_cgpa}</h2>\", unsafe_allow_html=True)
+        st.markdown(\"</div>\", unsafe_allow_html=True)
 
-        st.markdown("<div class='card' style='margin-top:16px'>", unsafe_allow_html=True)
-        if st.button("Compute CGPA for all students"):
+        st.markdown(\"<div class='card fade-in' style='margin-top:16px'>\", unsafe_allow_html=True)
+        if st.button(\"Compute CGPA for all students\"):
             out = []
             for sid in students['student_id'].tolist():
                 result = compute_student_report(sid)
                 if result:
                     df, summ = result
-                    out.append({
-                        "roll": summ['roll'],
-                        "name": summ['name'],
-                        "cgpa": summ['cgpa'],
-                        "total_credits": summ['total_credits']
-                    })
+                    out.append({\"roll\": summ['roll'], \"name\": summ['name'], \"cgpa\": summ['cgpa'], \"total_credits\": summ['total_credits']})
             if out:
-                st.subheader("CGPA Leaderboard")
-                st.dataframe(pd.DataFrame(out).sort_values(["cgpa"], ascending=False), use_container_width=True)
+                st.subheader(\"CGPA Leaderboard\")
+                st.dataframe(pd.DataFrame(out).sort_values([\"cgpa\"], ascending=False), use_container_width=True)
             else:
-                st.info("No marks present yet.")
-        st.markdown("</div>", unsafe_allow_html=True)
+                st.info(\"No marks present yet.\")
+        st.markdown(\"</div>\", unsafe_allow_html=True)
 
-    elif menu == "Add Data":
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.header("Add Students & Subjects")
-        with st.form("student_form"):
-            st.subheader("Add student")
-            roll = st.text_input("Roll (unique)", value="")
-            name = st.text_input("Name")
-            program = st.text_input("Program / Course (optional)")
-            submitted = st.form_submit_button("Add student")
+    elif menu == \"Add Data\":
+        st.markdown(\"<div class='card fade-in'>\", unsafe_allow_html=True)
+        st.header(\"Add Students & Subjects\")
+        with st.form(\"student_form\"):
+            st.subheader(\"Add student\")
+            roll = st.text_input(\"Roll (unique)\", value=\"\")
+            name = st.text_input(\"Name\")
+            program = st.text_input(\"Program / Course (optional)\")
+            submitted = st.form_submit_button(\"Add student\")
             if submitted:
-                if roll.strip() == "" or name.strip() == "":
-                    st.error("Fill roll and name.")
+                if roll.strip() == \"\" or name.strip() == \"\":
+                    st.error(\"Fill roll and name.\")
                 else:
                     add_student(roll.strip(), name.strip(), program.strip())
 
-        st.markdown("---")
-        with st.form("subject_form"):
-            st.subheader("Add subject")
-            code = st.text_input("Subject code (unique)", value="", key="scode")
-            title = st.text_input("Title", key="stitle")
-            credits = st.number_input("Credits", min_value=0.0, value=3.0, step=0.5, key="scredit")
-            submitted2 = st.form_submit_button("Add subject")
+        st.markdown(\"---\")
+        with st.form(\"subject_form\"):
+            st.subheader(\"Add subject\")
+            code = st.text_input(\"Subject code (unique)\", value=\"\", key=\"scode\")
+            title = st.text_input(\"Title\", key=\"stitle\")
+            credits = st.number_input(\"Credits\", min_value=0.0, value=3.0, step=0.5, key=\"scredit\")
+            submitted2 = st.form_submit_button(\"Add subject\")
             if submitted2:
-                if code.strip() == "" or title.strip() == "":
-                    st.error("Fill code and title.")
+                if code.strip() == \"\" or title.strip() == \"\":
+                    st.error(\"Fill code and title.\")
                 else:
                     add_subject(code.strip(), title.strip(), float(credits))
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown(\"</div>\", unsafe_allow_html=True)
 
-    elif menu == "Enter Marks":
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.header("Enter / Update Marks")
+    elif menu == \"Enter Marks\":
+        st.markdown(\"<div class='card fade-in'>\", unsafe_allow_html=True)
+        st.header(\"Enter / Update Marks\")
         students = get_all_students_df()
         subs = get_all_subjects_df()
         if students.empty or subs.empty:
-            st.info("You need to add at least one student and one subject first.")
+            st.info(\"You need to add at least one student and one subject first.\")
         else:
-            with st.form("marks_form"):
-                roll = st.selectbox("Student (by roll)", students['roll'].tolist())
-                subject_code = st.selectbox("Subject code", subs['code'].tolist())
-                marks = st.number_input("Marks obtained", min_value=0.0, value=0.0)
-                max_marks = st.number_input("Max marks (for percent)", min_value=1.0, value=100.0)
-                submitted3 = st.form_submit_button("Save marks")
+            with st.form(\"marks_form\"):
+                roll = st.selectbox(\"Student (by roll)\", students['roll'].tolist())
+                subject_code = st.selectbox(\"Subject code\", subs['code'].tolist())
+                marks = st.number_input(\"Marks obtained\", min_value=0.0, value=0.0)
+                max_marks = st.number_input(\"Max marks (for percent)\", min_value=1.0, value=100.0)
+                submitted3 = st.form_submit_button(\"Save marks\")
                 if submitted3:
                     add_marks(roll, subject_code, marks, max_marks)
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown(\"</div>\", unsafe_allow_html=True)
 
-    elif menu == "Student Report":
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.header("Generate Student Report")
+    elif menu == \"Student Report\":
+        st.markdown(\"<div class='card fade-in'>\", unsafe_allow_html=True)
+        st.header(\"Generate Student Report\")
         students = get_all_students_df()
         if students.empty:
-            st.info("No students yet.")
+            st.info(\"No students yet.\")
         else:
-            roll_selected = st.selectbox("Choose student", students['roll'].tolist())
+            roll_selected = st.selectbox(\"Choose student\", students['roll'].tolist())
             sid = int(students[students['roll']==roll_selected]['student_id'].iloc[0])
             res = compute_student_report(sid)
             if not res:
-                st.warning("No marks recorded for this student yet.")
+                st.warning(\"No marks recorded for this student yet.\")
             else:
                 df, summary = res
-                st.subheader(f"{summary['name']} — {summary['roll']}")
-                st.metric("CGPA", summary['cgpa'])
-                st.write("Detailed marks / grades")
+                st.subheader(f\"{summary['name']} — {summary['roll']}\")
+                st.metric(\"CGPA\", summary['cgpa'])
+                st.write(\"Detailed marks / grades\")
                 display_df = df[['code','title','credits','marks','max_marks','percent','grade','grade_point']]
-                st.dataframe(display_df.style.format({"percent":"{:.2f}","grade_point":"{:.2f}"}), height=300)
+                st.dataframe(display_df.style.format({\"percent\":\"{:.2f}\",\"grade_point\":\"{:.2f}\"}), height=300)
 
-                # Download CSV/Excel
                 csv_bytes = display_df.to_csv(index=False).encode('utf-8')
-                st.download_button("Download CSV", csv_bytes, file_name=f"report_{summary['roll']}.csv", mime="text/csv")
+                st.download_button(\"Download CSV\", csv_bytes, file_name=f\"report_{summary['roll']}.csv\", mime=\"text/csv\")
 
-                if st.button("Export Excel for this student"):
-                    bytes_xl = export_df_to_excel_bytes({"report": display_df})
-                    st.download_button("Download Excel", bytes_xl, file_name=f"report_{summary['roll']}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        st.markdown("</div>", unsafe_allow_html=True)
+                if st.button(\"Export Excel for this student\"):
+                    bytes_xl = export_df_to_excel_bytes({\"report\": display_df})
+                    st.download_button(\"Download Excel\", bytes_xl, file_name=f\"report_{summary['roll']}.xlsx\", mime=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\")
+        st.markdown(\"</div>\", unsafe_allow_html=True)
 
-    elif menu == "Export":
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.header("Export All Data")
+    elif menu == \"Export\":
+        st.markdown(\"<div class='card fade-in'>\", unsafe_allow_html=True)
+        st.header(\"Export All Data\")
         students = get_all_students_df()
         subjects = get_all_subjects_df()
 
         conn = get_conn()
-        marks_df = pd.read_sql_query("""
+        marks_df = pd.read_sql_query(\"\"\"
         SELECT s.roll, s.name, sub.code AS subject_code, sub.title AS subject_title, sub.credits,
                m.marks, m.max_marks
         FROM marks m
         JOIN students s ON m.student_id = s.student_id
         JOIN subjects sub ON m.subject_id = sub.subject_id
         ORDER BY s.roll
-        """, conn)
+        \"\"\", conn)
         conn.close()
 
-        st.write("Students")
+        st.write(\"Students\")
         st.dataframe(students)
-        st.write("Subjects")
+        st.write(\"Subjects\")
         st.dataframe(subjects)
-        st.write("Marks")
+        st.write(\"Marks\")
         st.dataframe(marks_df)
 
-        if st.button("Export All to Excel"):
+        if st.button(\"Export All to Excel\"):
             bytes_xl = export_df_to_excel_bytes({
-                "students": students,
-                "subjects": subjects,
-                "marks": marks_df
+                \"students\": students,
+                \"subjects\": subjects,
+                \"marks\": marks_df
             })
-            st.download_button("Download Excel", bytes_xl, file_name="all_results.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.download_button(\"Download Excel\", bytes_xl, file_name=\"all_results.xlsx\", mime=\"application/vnd.openxmlformats-officedocument-spreadsheetml.sheet\")
+        st.markdown(\"</div>\", unsafe_allow_html=True)
 
-    elif menu == "Admin":
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.header("Admin / DB Tools")
-        if st.button("Reset ALL data (drop tables)"):
-            if st.checkbox("I understand this will erase ALL data. Confirm to reset database.", key="confirm_reset"):
+    elif menu == \"Admin\":
+        st.markdown(\"<div class='card fade-in'>\", unsafe_allow_html=True)
+        st.header(\"Admin / DB Tools\")
+        if st.button(\"Reset ALL data (drop tables)\"):
+            if st.checkbox(\"I understand this will erase ALL data. Confirm to reset database.\", key=\"confirm_reset\"):
                 conn = get_conn()
                 cur = conn.cursor()
-                cur.execute("DROP TABLE IF EXISTS marks")
-                cur.execute("DROP TABLE IF EXISTS subjects")
-                cur.execute("DROP TABLE IF EXISTS students")
+                cur.execute(\"DROP TABLE IF EXISTS marks\")
+                cur.execute(\"DROP TABLE IF EXISTS subjects\")
+                cur.execute(\"DROP TABLE IF EXISTS students\")
                 conn.commit()
                 conn.close()
                 init_db()
-                st.success("Database reset.")
-        st.markdown("Use this to backup the DB file (`data/results.db`) before destructive operations.")
-        st.markdown("</div>", unsafe_allow_html=True)
+                st.success(\"Database reset.\")
+        st.markdown(\"Use this to backup the DB file (`data/results.db`) before destructive operations.\")
+        st.markdown(\"</div>\", unsafe_allow_html=True)
 
     # footer
-    st.sidebar.markdown("---")
-    st.sidebar.write("Built with ❤️ using Streamlit")
+    st.sidebar.markdown(\"---\")
+    st.sidebar.write(\"Built with ❤️ using Streamlit\")
 except Exception as e:
-    st.exception("Startup error — see traceback below:")
+    st.exception(\"Startup error — see traceback below:\")
     st.text(traceback.format_exc())
